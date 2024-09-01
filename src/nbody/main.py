@@ -8,8 +8,10 @@ from numba import jit, prange, float32, int32, void
 import h5py
 
 
-@jit(float32(float32, float32, float32), nopython=True, fastmath=True, cache=True)
-def m_NFW(r, R_s, rho_0):
+@jit(float32(float32), nopython=True, fastmath=True, cache=True)
+def m_NFW(r):
+    R_s = np.float32(20.0)
+    rho_0 = np.float32(5932371.0)
     result = 4 * np.pi * rho_0 * R_s**3 * (np.log(1 + r / R_s) - r / (r + R_s))
     return result  # The return is already of type float32, no need to cast
 
@@ -22,8 +24,6 @@ def m_NFW(r, R_s, rho_0):
         float32[:],
         float32,
         float32,
-        float32,
-        float32,
         int32,
     ),
     nopython=True,
@@ -31,7 +31,7 @@ def m_NFW(r, R_s, rho_0):
     fastmath=True,
     cache=True,
 )
-def net_fields(fields, N, POS, MASS, e, G, R_s, rho_0, NFW_on):
+def net_fields(fields, N, POS, MASS, e, G, NFW_on):
     """
     Calculates gravitational forces between N bodies, avoiding self-interaction and using pairwise calculations. 
     Optimized with Numba for performance.
@@ -41,7 +41,7 @@ def net_fields(fields, N, POS, MASS, e, G, R_s, rho_0, NFW_on):
         acc = acc * 0
         if NFW_on == 1:
             r_i = np.sqrt(POS[i][0] ** 2 + POS[i][1] ** 2 + POS[i][2] ** 2)
-            M_i = m_NFW(r_i, R_s, rho_0)
+            M_i = m_NFW(r_i)
             NFW_field_factor = -G * M_i / r_i**3
         for j in prange(N):
             if i == j:
@@ -80,8 +80,6 @@ def net_fields(fields, N, POS, MASS, e, G, R_s, rho_0, NFW_on):
         int32,
         float32,
         float32,
-        float32,
-        float32,
         int32,
     ),
     nopython=True,
@@ -89,22 +87,26 @@ def net_fields(fields, N, POS, MASS, e, G, R_s, rho_0, NFW_on):
     parallel=False,
 )
 def update_positions(
-    fields, POS, VEL, MASS, dt, is_first_step, N, e, G, R_s, rho_0, NFW_on
+    fields, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on
 ):
     """
     Updates particle positions and velocities using a Leapfrog Step integration method. Considers whether it's the first integration step to precompute the fields.
     """
 
     if is_first_step == 1:
-        net_fields(fields, N, POS, MASS, e, G, R_s, rho_0, NFW_on)
+        net_fields(fields, N, POS, MASS, e, G, NFW_on)
 
     VEL += 0.5 * fields * dt
     POS += VEL * dt
 
-    net_fields(fields, N, POS, MASS, e, G, R_s, rho_0, NFW_on)
+    net_fields(fields, N, POS, MASS, e, G, NFW_on)
     VEL += 0.5 * fields * dt
 
 
+integrator_dict = {
+    "RK4": rk4_step,
+    "Euler": euler_step,
+}
 class NBodySimulation:
     def __init__(self, path_ics, snap_path):
         """
@@ -114,8 +116,7 @@ class NBodySimulation:
         self.simulation_done = False
         self.path_ics = path_ics
         self.path_output = snap_path
-        self.save_output = save_output
-
+        
         self.R_s = np.float32(20.0)
         self.rho_0 = np.float32(5932371.0)
         self.NFW_on = int32(1)
@@ -146,6 +147,10 @@ class NBodySimulation:
             snapshots = max_snapshots
 
         self.snap_times = np.linspace(0.0, duration, snapshots)
+
+    def set_integrator(self, integrator):
+        
+        self.update_positions = integrator_dict[integrator]
 
     def set_time_NFW_off(self, time):
         self.time_NFW_off = time
