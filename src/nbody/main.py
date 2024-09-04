@@ -1,9 +1,9 @@
 import os
-import shutil
+# import shutil
 import time
 
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from numba import jit, prange, float32, int32, void
 import h5py
 
@@ -16,21 +16,18 @@ def m_NFW(r):
     return result  # The return is already of type float32, no need to cast
 
 
-@jit(
-    void(
+@jit(void(
         float32[:, :],
         int32,
         float32[:, :],
         float32[:],
         float32,
         float32,
-        int32,
-    ),
+        int32,),
     nopython=True,
     parallel=True,
     fastmath=True,
-    cache=True,
-)
+    cache=True,)
 def net_fields(fields, N, POS, MASS, e, G, NFW_on):
     """
     Calculates gravitational forces between N bodies, avoiding self-interaction and using pairwise calculations. 
@@ -68,9 +65,7 @@ def net_fields(fields, N, POS, MASS, e, G, NFW_on):
             fields[i, 1] = np.sum(acc[:, 1])
             fields[i, 2] = np.sum(acc[:, 2])
 
-
-@jit(
-    void(
+@jit(void(
         float32[:, :],
         float32[:, :],
         float32[:, :],
@@ -80,37 +75,96 @@ def net_fields(fields, N, POS, MASS, e, G, NFW_on):
         int32,
         float32,
         float32,
-        int32,
-    ),
+        int32,),
     nopython=True,
     fastmath=True,
-    parallel=False,
-)
-def update_positions(
-    fields, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on
-):
-    """
-    Updates particle positions and velocities using a Leapfrog Step integration method. Considers whether it's the first integration step to precompute the fields.
-    """
+    parallel=False,)
+def symplectic_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
 
     if is_first_step == 1:
-        net_fields(fields, N, POS, MASS, e, G, NFW_on)
+        net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
 
-    VEL += 0.5 * fields * dt
+    VEL += 0.5 * FIELDS * dt
     POS += VEL * dt
 
-    net_fields(fields, N, POS, MASS, e, G, NFW_on)
-    VEL += 0.5 * fields * dt
+    net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
+    VEL += 0.5 * FIELDS * dt
 
+@jit(void(
+        float32[:, :],
+        float32[:, :],
+        float32[:, :],
+        float32[:],
+        float32,
+        int32,
+        int32,
+        float32,
+        float32,
+        int32,),
+    nopython=True,
+    fastmath=True,
+    parallel=False,)
+def rk4_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
+
+    if is_first_step == 1:
+        net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
+
+    # First set of calculations (k1)
+    k1_vel = FIELDS * dt
+    k1_pos = VEL * dt
+
+    # Second set of calculations (k2)
+    net_fields(FIELDS, N, POS + np.float32(0.5) * k1_pos, MASS, e, G, NFW_on)
+    k2_vel = FIELDS * dt
+    k2_pos = (VEL + np.float32(0.5) * k1_vel) * dt
+
+    # Third set of calculations (k3)
+    net_fields(FIELDS, N, POS + np.float32(0.5) * k2_pos, MASS, e, G, NFW_on)
+    k3_vel = FIELDS * dt
+    k3_pos = (VEL + np.float32(0.5) * k2_vel) * dt
+
+    # Fourth set of calculations (k4)
+    net_fields(FIELDS, N, POS + k3_pos, MASS, e, G, NFW_on)
+    k4_vel = FIELDS * dt
+    k4_pos = (VEL + k3_vel) * dt
+
+    # Combine the results
+    POS += (k1_pos + 2 * k2_pos + 2 * k3_pos + k4_pos) / 6
+    VEL += (k1_vel + 2 * k2_vel + 2 * k3_vel + k4_vel) / 6
+
+
+@jit(void(
+        float32[:, :],
+        float32[:, :],
+        float32[:, :],
+        float32[:],
+        float32,
+        int32,
+        int32,
+        float32,
+        float32,
+        int32,),
+    nopython=True,
+    fastmath=True,
+    parallel=False,)
+def euler_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
+    
+    net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
+    # Update position
+    POS += VEL * dt
+    # Update velocity
+    VEL += FIELDS * dt
 
 integrator_dict = {
     "RK4": rk4_step,
     "Euler": euler_step,
+    "Symplectic": symplectic_step,
 }
 class NBodySimulation:
     def __init__(self, path_ics, snap_path):
         """
-        Initializes the simulation with paths for initial conditions and snapshot output, and loads initial state data from an HDF5 file.
+        Initializes the simulation with paths for initial conditions and snapshot output, and 
+        loads initial state data from an HDF5 file.
         """
 
         self.simulation_done = False
@@ -123,7 +177,6 @@ class NBodySimulation:
         self.time_NFW_off = np.inf
 
         self._create_output_file()
-
 
         with h5py.File(self.path_ics, "r") as file:
             self.dimensions = file["Header"].attrs["Dimensions"]
@@ -157,7 +210,8 @@ class NBodySimulation:
 
     def run_simulation(self, e=0.01, G=4.302e-6):
         """
-        Runs the N-body simulation, managing time steps, updating positions, handling first step differentiation, and saving snapshots at predefined times.
+        Runs the N-body simulation, managing time steps, updating positions, handling first step differentiation, 
+        and saving snapshots at predefined times.
         """
 
         if self.simulation_done:
@@ -173,8 +227,7 @@ class NBodySimulation:
         self.snapshot_idx = 0
         start_clock = time.time()
         while self.time < self.duration:
-
-            update_positions(
+            self.update_positions(
                 fields,
                 self.POS,
                 self.VEL,
@@ -184,10 +237,7 @@ class NBodySimulation:
                 self.N,
                 self.e,
                 self.G,
-                self.R_s,
-                self.rho_0,
-                self.NFW_on,
-            )
+                self.NFW_on,)
             self.time += self.time_step
             is_first_step = 0
 
@@ -216,15 +266,14 @@ class NBodySimulation:
         vel_temp = np.random.rand(self.N, self.dimensions).astype(np.float32)
         mass_temp = np.random.rand(self.N).astype(np.float32)
         fields = np.zeros((self.N, 2), dtype=np.float32)
-
         step_clocktime = 0
-        is_first_step = 1
+        is_first_step = np.int32(1)
         step = 0
 
         start_clock = time.time()
         while step < num_steps:
             start_clock_step = time.time()
-            update_positions(
+            self.update_positions(
                 fields,
                 pos_temp,
                 vel_temp,
@@ -234,10 +283,7 @@ class NBodySimulation:
                 self.N,
                 np.float32(1),
                 np.float32(1),
-                self.R_s,
-                self.rho_0,
-                self.NFW_on,
-            )
+                np.int32(1),)
             is_first_step = 0
 
             end_clock_step = time.time()
