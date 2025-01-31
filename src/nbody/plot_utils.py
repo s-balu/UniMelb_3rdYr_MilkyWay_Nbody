@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 # from matplotlib.collections import LineCollection
 # from matplotlib.colors import LinearSegmentedColormap
 import h5py
+import cv2
+
 
 
 class Figure:
@@ -262,4 +264,31 @@ def make_frames(
 
     return
 
+def create_video_from_frames(frame_folder, output_video_path, frame_rate=30, resolution=None):
+    # Get a list of all files in the folder
+    files = [f for f in os.listdir(frame_folder) if os.path.isfile(os.path.join(frame_folder, f))]
+    # Sort files to ensure the correct order
+    files.sort()
+    
+    # Read the first image to get the dimensions
+    first_frame = cv2.imread(os.path.join(frame_folder, files[0]))
+    height, width, layers = first_frame.shape
+    
+    if resolution:
+        width, height = resolution
 
+    # Define the codec and create VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video = cv2.VideoWriter(output_video_path, fourcc, frame_rate, (width, height))
+
+    for file in files:
+        frame_path = os.path.join(frame_folder, file)
+        frame = cv2.imread(frame_path)
+
+        if resolution:
+            frame = cv2.resize(frame, (width, height))
+
+        video.write(frame)
+
+    video.release()
+    print(f"Video saved to {output_video_path}")

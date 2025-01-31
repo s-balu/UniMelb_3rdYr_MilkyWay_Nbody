@@ -1,9 +1,7 @@
 import os
-# import shutil
 import time
 
 import numpy as np
-# import matplotlib.pyplot as plt
 from numba import jit, prange, float32, int32, void
 import h5py
 
@@ -16,21 +14,24 @@ def m_NFW(r):
     return result  # The return is already of type float32, no need to cast
 
 
-@jit(void(
+@jit(
+    void(
         float32[:, :],
         int32,
         float32[:, :],
         float32[:],
         float32,
         float32,
-        int32,),
+        int32,
+    ),
     nopython=True,
     parallel=True,
     fastmath=True,
-    cache=True,)
+    cache=True,
+)
 def net_fields(fields, N, POS, MASS, e, G, NFW_on):
     """
-    Calculates gravitational forces between N bodies, avoiding self-interaction and using pairwise calculations. 
+    Calculates gravitational forces between N bodies, avoiding self-interaction and using pairwise calculations.
     Optimized with Numba for performance.
     """
     acc = np.zeros((N, 3), dtype=np.float32)
@@ -65,7 +66,9 @@ def net_fields(fields, N, POS, MASS, e, G, NFW_on):
             fields[i, 1] = np.sum(acc[:, 1])
             fields[i, 2] = np.sum(acc[:, 2])
 
-@jit(void(
+
+@jit(
+    void(
         float32[:, :],
         float32[:, :],
         float32[:, :],
@@ -75,12 +78,13 @@ def net_fields(fields, N, POS, MASS, e, G, NFW_on):
         int32,
         float32,
         float32,
-        int32,),
+        int32,
+    ),
     nopython=True,
     fastmath=True,
-    parallel=False,)
+    parallel=False,
+)
 def symplectic_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
-
     if is_first_step == 1:
         net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
 
@@ -90,7 +94,9 @@ def symplectic_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
     net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
     VEL += 0.5 * FIELDS * dt
 
-@jit(void(
+
+@jit(
+    void(
         float32[:, :],
         float32[:, :],
         float32[:, :],
@@ -100,12 +106,13 @@ def symplectic_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
         int32,
         float32,
         float32,
-        int32,),
+        int32,
+    ),
     nopython=True,
     fastmath=True,
-    parallel=False,)
+    parallel=False,
+)
 def rk4_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
-
     if is_first_step == 1:
         net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
 
@@ -133,7 +140,8 @@ def rk4_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
     VEL += (k1_vel + 2 * k2_vel + 2 * k3_vel + k4_vel) / 6
 
 
-@jit(void(
+@jit(
+    void(
         float32[:, :],
         float32[:, :],
         float32[:, :],
@@ -143,34 +151,38 @@ def rk4_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
         int32,
         float32,
         float32,
-        int32,),
+        int32,
+    ),
     nopython=True,
     fastmath=True,
-    parallel=False,)
+    parallel=False,
+)
 def euler_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
-    
     net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
     # Update position
     POS += VEL * dt
     # Update velocity
     VEL += FIELDS * dt
 
+
 integrator_dict = {
     "RK4": rk4_step,
     "Euler": euler_step,
     "Symplectic": symplectic_step,
 }
+
+
 class NBodySimulation:
     def __init__(self, path_ics, snap_path):
         """
-        Initializes the simulation with paths for initial conditions and snapshot output, and 
+        Initializes the simulation with paths for initial conditions and snapshot output, and
         loads initial state data from an HDF5 file.
         """
 
         self.simulation_done = False
         self.path_ics = path_ics
         self.path_output = snap_path
-        
+
         self.R_s = np.float32(20.0)
         self.rho_0 = np.float32(5932371.0)
         self.NFW_on = int32(1)
@@ -202,7 +214,6 @@ class NBodySimulation:
         self.snap_times = np.linspace(0.0, duration, snapshots)
 
     def set_integrator(self, integrator):
-        
         self.update_positions = integrator_dict[integrator]
 
     def set_time_NFW_off(self, time):
@@ -210,7 +221,7 @@ class NBodySimulation:
 
     def run_simulation(self, e=0.01, G=4.302e-6):
         """
-        Runs the N-body simulation, managing time steps, updating positions, handling first step differentiation, 
+        Runs the N-body simulation, managing time steps, updating positions, handling first step differentiation,
         and saving snapshots at predefined times.
         """
 
@@ -237,7 +248,8 @@ class NBodySimulation:
                 self.N,
                 self.e,
                 self.G,
-                self.NFW_on,)
+                self.NFW_on,
+            )
             self.time += self.time_step
             is_first_step = 0
 
@@ -283,7 +295,8 @@ class NBodySimulation:
                 self.N,
                 np.float32(1),
                 np.float32(1),
-                np.int32(1),)
+                np.int32(1),
+            )
             is_first_step = 0
 
             end_clock_step = time.time()
@@ -305,7 +318,6 @@ class NBodySimulation:
         Saves the current state of the simulation to an output file as a snapshot at the current time step.
         """
         with h5py.File(self.path_output, "a") as f:
-
             step_group = f.create_group(f"{self.snapshot_idx:04d}")
             step_group.create_dataset("Positions", data=self.POS, dtype=np.float32)
             step_group.create_dataset("Velocities", data=self.VEL, dtype=np.float32)
@@ -328,9 +340,7 @@ class NBodySimulation:
 
         with h5py.File(self.path_ics, "r") as file_ics:
             with h5py.File(self.path_output, "w") as file_output:
-
                 for group_name in file_ics.keys():
-
                     if group_name != "Bodies":
                         group = file_output.create_group(group_name)
                     else:
@@ -370,3 +380,4 @@ class NBodySimulation:
                 TIME[ii] = file[f"{i:04d}"].attrs["Time"]
 
         return POS, VEL, MASS, TIME
+
