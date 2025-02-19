@@ -1,17 +1,21 @@
 import os
 import time
 
-import numpy as np
-from numba import jit, prange, float32, int32, void
-import h5py
+import numpy as np  # numpy for numerical operations
+from numba import jit, prange, float32, int32, void  # fancy decorators for performance
+import h5py  # to handle hdf5 files
 
 
 @jit(float32(float32), nopython=True, fastmath=True, cache=True)
 def m_NFW(r):
-    R_s = np.float32(20.0)
-    rho_0 = np.float32(5932371.0)
+    """
+    Calculates the mass enclosed within a radius r for the NFW profile.
+    The scale radius and density parameter are hardcoded for the Milky Way.
+    """
+    R_s = np.float32(20.0)  # NFW scale radius
+    rho_0 = np.float32(5932371.0)  # NFW density parameter
     result = 4 * np.pi * rho_0 * R_s**3 * (np.log(1 + r / R_s) - r / (r + R_s))
-    return result  # The return is already of type float32, no need to cast
+    return result
 
 
 @jit(
@@ -32,15 +36,27 @@ def m_NFW(r):
 def net_fields(fields, N, POS, MASS, e, G, NFW_on):
     """
     Calculates gravitational forces between N bodies, avoiding self-interaction and using pairwise calculations.
-    Optimized with Numba for performance.
+    Optimized with Numba for performance. Specifically, the particles are looped in parallel using the 'prange'.
+    fields: store the gravitational field  (technically the acceleration) for each particle.
+
+    N: number of particles
+    POS: positions of the particles
+    MASS: masses of the particles
+    e: softerning parameter
+    G: gravitational constant
+    NFW_on: flag to turn on/off the NFW profile
     """
     acc = np.zeros((N, 3), dtype=np.float32)
     for i in prange(N):
         acc = acc * 0
+
+        # Is the NFW halo present?
         if NFW_on == 1:
             r_i = np.sqrt(POS[i][0] ** 2 + POS[i][1] ** 2 + POS[i][2] ** 2)
             M_i = m_NFW(r_i)
             NFW_field_factor = -G * M_i / r_i**3
+
+        # Loop over all particels. Note the prange for doing this in parallel. Also note how we avoid self-interaction.
         for j in prange(N):
             if i == j:
                 continue
@@ -57,7 +73,7 @@ def net_fields(fields, N, POS, MASS, e, G, NFW_on):
             acc[j][1] = Fy * MASS[j]
             acc[j][2] = Fz * MASS[j]
 
-        if NFW_on == 1:
+        if NFW_on == 1:  # Add the NFW field if it is present
             fields[i, 0] = np.sum(acc[:, 0]) + NFW_field_factor * POS[i][0]
             fields[i, 1] = np.sum(acc[:, 1]) + NFW_field_factor * POS[i][1]
             fields[i, 2] = np.sum(acc[:, 2]) + NFW_field_factor * POS[i][2]
@@ -183,16 +199,17 @@ class NBodySimulation:
         self.path_ics = path_ics
         self.path_output = snap_path
 
-        self.R_s = np.float32(20.0)
-        self.rho_0 = np.float32(5932371.0)
-        self.NFW_on = int32(1)
-        self.time_NFW_off = np.inf
+        self.R_s = np.float32(20.0)  # This is the NFW scale radius
+        self.rho_0 = np.float32(5932371.0)  # This is the NFW density parameter
+        self.NFW_on = int32(1)  # NFW is ON by default
+        self.time_NFW_off = np.inf  # and is never turned OFF by default
 
         self._create_output_file()
 
+        # We now read the initial conditions from the file
         with h5py.File(self.path_ics, "r") as file:
-            self.dimensions = file["Header"].attrs["Dimensions"]
-            self.N = file["Header"].attrs["N"]
+            self.dimensions = file["Header"].attrs["Dimensions"]  # Number of dimensions
+            self.N = file["Header"].attrs["N"]  # Number of particles or the N-bodies.
 
             self.POS = np.array(file["Bodies"]["Positions"])
             self.VEL = np.array(file["Bodies"]["Velocities"])
@@ -208,9 +225,11 @@ class NBodySimulation:
 
         max_snapshots = int(duration / time_step)
 
+        # Sanity check for the number of snapshots.
         if snapshots > max_snapshots:
             snapshots = max_snapshots
 
+        # When to dump the snapshots
         self.snap_times = np.linspace(0.0, duration, snapshots)
 
     def set_integrator(self, integrator):
@@ -219,7 +238,7 @@ class NBodySimulation:
     def set_time_NFW_off(self, time):
         self.time_NFW_off = time
 
-    def run_simulation(self, e=0.01, G=4.302e-6):
+    def run_simulation(self, e=0.01, G=1):
         """
         Runs the N-body simulation, managing time steps, updating positions, handling first step differentiation,
         and saving snapshots at predefined times.
