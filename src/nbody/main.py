@@ -37,8 +37,8 @@ def net_fields(fields, N, POS, MASS, e, G, NFW_on):
     """
     Calculates gravitational forces between N bodies, avoiding self-interaction and using pairwise calculations.
     Optimized with Numba for performance. Specifically, the particles are looped in parallel using the 'prange'.
-    fields: store the gravitational field  (technically the acceleration) for each particle.
 
+    fields: store the gravitational field  (technically the acceleration) for each particle.
     N: number of particles
     POS: positions of the particles
     MASS: masses of the particles
