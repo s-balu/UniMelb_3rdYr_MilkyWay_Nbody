@@ -91,7 +91,6 @@ def net_fields(fields, N, POS, MASS, e, G, NFW_on):
         float32[:],
         float32,
         int32,
-        int32,
         float32,
         float32,
         int32,
@@ -100,10 +99,7 @@ def net_fields(fields, N, POS, MASS, e, G, NFW_on):
     fastmath=True,
     parallel=False,
 )
-def symplectic_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
-    if is_first_step == 1:
-        net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
-
+def symplectic_step(FIELDS, POS, VEL, MASS, dt, N, e, G, NFW_on):
     VEL += 0.5 * FIELDS * dt
     POS += VEL * dt
 
@@ -119,7 +115,6 @@ def symplectic_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
         float32[:],
         float32,
         int32,
-        int32,
         float32,
         float32,
         int32,
@@ -128,10 +123,8 @@ def symplectic_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
     fastmath=True,
     parallel=False,
 )
-def rk4_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
-    if is_first_step == 1:
-        net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
-
+def rk4_step(FIELDS, POS, VEL, MASS, dt, N, e, G, NFW_on):
+    net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
     # First set of calculations (k1)
     k1_vel = FIELDS * dt
     k1_pos = VEL * dt
@@ -164,7 +157,6 @@ def rk4_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
         float32[:],
         float32,
         int32,
-        int32,
         float32,
         float32,
         int32,
@@ -173,7 +165,7 @@ def rk4_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
     fastmath=True,
     parallel=False,
 )
-def euler_step(FIELDS, POS, VEL, MASS, dt, is_first_step, N, e, G, NFW_on):
+def euler_step(FIELDS, POS, VEL, MASS, dt, N, e, G, NFW_on):
     net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
     # Update position
     POS += VEL * dt
@@ -257,13 +249,16 @@ class NBodySimulation:
         self.snapshot_idx = 0
         start_clock = time.time()
         while self.time < self.duration:
+            if is_first_step == 1:
+                net_fields(
+                    fields, self.N, self.POS, self.MASS, self.e, self.G, self.NFW_on
+                )
             self.update_positions(
                 fields,
                 self.POS,
                 self.VEL,
                 self.MASS,
                 self.time_step,
-                is_first_step,
                 self.N,
                 self.e,
                 self.G,
@@ -296,9 +291,8 @@ class NBodySimulation:
         pos_temp = np.random.rand(self.N, self.dimensions).astype(np.float32)
         vel_temp = np.random.rand(self.N, self.dimensions).astype(np.float32)
         mass_temp = np.random.rand(self.N).astype(np.float32)
-        fields = np.zeros((self.N, 2), dtype=np.float32)
+        fields = np.zeros((self.N, 3), dtype=np.float32)
         step_clocktime = 0
-        is_first_step = np.int32(1)
         step = 0
 
         start_clock = time.time()
@@ -310,13 +304,11 @@ class NBodySimulation:
                 vel_temp,
                 mass_temp,
                 self.time_step,
-                is_first_step,
                 self.N,
                 np.float32(1),
-                np.float32(1),
+                np.int32(1),
                 np.int32(1),
             )
-            is_first_step = 0
 
             end_clock_step = time.time()
             step_clocktime += end_clock_step - start_clock_step
@@ -399,4 +391,3 @@ class NBodySimulation:
                 TIME[ii] = file[f"{i:04d}"].attrs["Time"]
 
         return POS, VEL, MASS, TIME
-
