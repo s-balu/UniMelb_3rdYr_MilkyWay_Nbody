@@ -5,15 +5,11 @@ import time
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-# from matplotlib.collections import LineCollection
-# from matplotlib.colors import LinearSegmentedColormap
 import h5py
 import cv2
 
 
-
 class Figure:
-
     def __init__(
         self,
         subplot_1=1,
@@ -27,7 +23,8 @@ class Figure:
         wspace=None,
     ):
         """
-        Initializes a matplotlib figure with configurable subplots, figure size, DPI, aspect ratios, and spacing. Sets up figure and axes aesthetics like colors and grid settings.
+        Initializes a matplotlib figure with configurable subplots, figure size, DPI, aspect ratios, and spacing.
+        Sets up figure and axes aesthetics like colors and grid settings.
         """
         self.fig_size = fig_size
         self.ratio = ratio
@@ -117,7 +114,7 @@ class Figure:
             labelcolor=self.ax_color,
         )
 
-        if self.minor_ticks == True:
+        if self.minor_ticks:
             ax.minorticks_on()
 
             ax.tick_params(
@@ -138,7 +135,6 @@ class Figure:
             spine.set_color(self.ax_color)
 
         if self.grid:
-
             ax.grid(
                 which="major",
                 linewidth=self.fs * self.sw * 0.5,
@@ -169,7 +165,6 @@ def make_frames(
     ax_spines=True,
     N_max=None,
 ):
-
     if isinstance(lim, (float, int)):
         lim_x = [-lim, lim]
         lim_y = [-lim, lim]
@@ -195,11 +190,12 @@ def make_frames(
     ax.set_xlim(lim_x)
     ax.set_ylim(lim_y)
 
-    with h5py.File(path_output, "r") as file:
+    ax.set_xlabel("kpc")
+    ax.set_ylabel("kpc")
 
+    with h5py.File(path_output, "r") as file:
         N = file["Header"].attrs["N"]
-        # M = file["Header"].attrs["NSnapshots"]
-        M = 601
+        M = file["Header"].attrs["NSnapshots"]
 
         if N_max is None:
             N_max = M
@@ -240,7 +236,6 @@ def make_frames(
             if ax_spines:
                 Fig.save(save_path)
             else:
-
                 Fig.fig.subplots_adjust(
                     top=1, bottom=0, right=1, left=0, hspace=0, wspace=0
                 )
@@ -264,21 +259,28 @@ def make_frames(
 
     return
 
-def create_video_from_frames(frame_folder, output_video_path, frame_rate=30, resolution=None):
+
+def create_video_from_frames(
+    frame_folder, output_video_path, frame_rate=30, resolution=None
+):
     # Get a list of all files in the folder
-    files = [f for f in os.listdir(frame_folder) if os.path.isfile(os.path.join(frame_folder, f))]
+    files = [
+        f
+        for f in os.listdir(frame_folder)
+        if os.path.isfile(os.path.join(frame_folder, f))
+    ]
     # Sort files to ensure the correct order
     files.sort()
-    
+
     # Read the first image to get the dimensions
     first_frame = cv2.imread(os.path.join(frame_folder, files[0]))
     height, width, layers = first_frame.shape
-    
+
     if resolution:
         width, height = resolution
 
     # Define the codec and create VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     video = cv2.VideoWriter(output_video_path, fourcc, frame_rate, (width, height))
 
     for file in files:
