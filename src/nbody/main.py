@@ -291,7 +291,7 @@ class NBodySimulation:
         pos_temp = np.random.rand(self.N, self.dimensions).astype(np.float32)
         vel_temp = np.random.rand(self.N, self.dimensions).astype(np.float32)
         mass_temp = np.random.rand(self.N).astype(np.float32)
-        fields = np.zeros((self.N, 3), dtype=np.float32)
+        fields = np.zeros((self.N, self.dimensions), dtype=np.float32)
         step_clocktime = 0
         step = 0
 
@@ -315,7 +315,9 @@ class NBodySimulation:
             step += 1
 
         end_clock = time.time()
-        elapsed_time = end_clock - start_clock
+        elapsed_time = 1.2 * (
+            end_clock - start_clock
+        )  # the estiamte does not account for writing to the file. Hence 1.2 factor
         estimated_time = elapsed_time * self.duration / (self.time_step * num_steps)
         hours = int(estimated_time / 3600)
         minutes = int((estimated_time - hours * 3600) / 60)
