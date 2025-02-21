@@ -13,7 +13,7 @@ class Figure:
     def __init__(
         self,
         subplot_1=1,
-        subplot_2=1,
+        subplot_2=2,
         fig_size=720,
         ratio=1,
         dpi=300,
@@ -51,7 +51,7 @@ class Figure:
         self.facecolor = "w"
         self.text_color = "k"
 
-    def get_axes(self, flat=False):
+    def get_axes(self, flat=True):
         """
         Generates and returns the axes of the figure based on the subplot configuration. Optionally returns all axes as a flat list.
         """
@@ -155,14 +155,13 @@ class Figure:
 
 def make_frames(
     path_output,
-    ratio=1,
+    ratio=2,
     fig_size=1400,
-    lim=25,
+    lim=25,  # kpc
     marker_color="k",
     marker_size=None,
     facecolor="w",
     ax_color="k",
-    ax_spines=True,
     N_max=None,
 ):
     if isinstance(lim, (float, int)):
@@ -182,16 +181,17 @@ def make_frames(
     Fig = Figure(ratio=ratio, fig_size=fig_size)
     Fig.facecolor = facecolor
     Fig.ax_color = ax_color
-    ax = Fig.get_axes()
+    axs = Fig.get_axes()
     fs = Fig.fs
 
-    ax.axis("equal")
+    for ax in axs:
+        ax.axis("equal")
 
-    ax.set_xlim(lim_x)
-    ax.set_ylim(lim_y)
+        ax.set_xlim(lim_x)
+        ax.set_ylim(lim_y)
 
-    ax.set_xlabel("kpc")
-    ax.set_ylabel("kpc")
+        ax.set_xlabel("kpc")
+        ax.set_ylabel("kpc")
 
     with h5py.File(path_output, "r") as file:
         N = file["Header"].attrs["N"]
@@ -210,7 +210,7 @@ def make_frames(
             t = file[f"{i:04d}"].attrs["Time"]
             POS = file[f"{i:04d}"]["Positions"]
 
-            scatter = ax.scatter(
+            scatter_xy = axs[0].scatter(
                 POS[:, 0],
                 POS[:, 1],
                 c=marker_color,
@@ -218,41 +218,40 @@ def make_frames(
                 lw=0.0 * fs,
                 alpha=1,
             )
+            scatter_xz = axs[1].scatter(
+                POS[:, 0],
+                POS[:, 2],
+                c=marker_color,
+                s=fs * marker_size,
+                lw=0.0 * fs,
+                alpha=1,
+            )
 
-            text = ax.text(
+            text = axs[0].text(
                 0.98,
                 0.02,
                 f"Time: {1e3 * 0.98*t:.2f} Myr",
                 horizontalalignment="right",
                 verticalalignment="bottom",
-                transform=ax.transAxes,
+                transform=axs[0].transAxes,
                 fontsize=fs * 1.5,
                 color=ax_color,
             )
 
+            axs[1].set_yticklabels([])
+            axs[1].set_ylabel("")
+
             fig_name = f"render_{ii:04d}.jpg"
             save_path = savefold + fig_name
 
-            if ax_spines:
-                Fig.save(save_path)
-            else:
-                Fig.fig.subplots_adjust(
-                    top=1, bottom=0, right=1, left=0, hspace=0, wspace=0
-                )
+            Fig.fig.subplots_adjust(
+                top=1, bottom=0, right=1, left=0, hspace=0, wspace=0
+            )
 
-                ax.set_xticks([])
-                ax.set_yticks([])
-
-                for spine in ax.spines.values():
-                    spine.set_visible(False)
-
-                Fig.fig.patch.set_facecolor("grey")
-
-                Fig.save(save_path, bbox_inches="tight", pad_inches=0)
-
+            Fig.save(save_path)
             plt.close()
-
-            scatter.remove()
+            scatter_xy.remove()
+            scatter_xz.remove()
             text.remove()
 
     print(f"Save images time: {time.time() - time_start:.2f} s")
