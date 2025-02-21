@@ -242,7 +242,7 @@ class NBodySimulation:
         self.e = np.float32(e)
         self.G = np.float32(G)
 
-        fields = np.zeros((self.N, 3), dtype=np.float32)
+        fields = np.zeros((self.N, self.dimensions), dtype=np.float32)
 
         self.time = 0.0
         is_first_step = 1
