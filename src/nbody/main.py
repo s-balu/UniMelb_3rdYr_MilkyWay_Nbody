@@ -124,7 +124,6 @@ def symplectic_step(FIELDS, POS, VEL, MASS, dt, N, e, G, NFW_on):
     parallel=False,
 )
 def rk4_step(FIELDS, POS, VEL, MASS, dt, N, e, G, NFW_on):
-    net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
     # First set of calculations (k1)
     k1_vel = FIELDS * dt
     k1_pos = VEL * dt
@@ -148,6 +147,8 @@ def rk4_step(FIELDS, POS, VEL, MASS, dt, N, e, G, NFW_on):
     POS += (k1_pos + 2 * k2_pos + 2 * k3_pos + k4_pos) / 6
     VEL += (k1_vel + 2 * k2_vel + 2 * k3_vel + k4_vel) / 6
 
+    net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
+
 
 @jit(
     void(
@@ -166,11 +167,12 @@ def rk4_step(FIELDS, POS, VEL, MASS, dt, N, e, G, NFW_on):
     parallel=False,
 )
 def euler_step(FIELDS, POS, VEL, MASS, dt, N, e, G, NFW_on):
-    net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
     # Update position
     POS += VEL * dt
     # Update velocity
     VEL += FIELDS * dt
+
+    net_fields(FIELDS, N, POS, MASS, e, G, NFW_on)
 
 
 integrator_dict = {
@@ -317,7 +319,7 @@ class NBodySimulation:
         end_clock = time.time()
         elapsed_time = 1.2 * (
             end_clock - start_clock
-        )  # the estiamte does not account for writing to the file. Hence 1.2 factor
+        )  # the estimate does not account for writing to the disk. Hence 1.2 factor
         estimated_time = elapsed_time * self.duration / (self.time_step * num_steps)
         hours = int(estimated_time / 3600)
         minutes = int((estimated_time - hours * 3600) / 60)
